@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>에스파크 라운딩</title>
+<meta name="theme-color" content="#0b1310">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="에스파크">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+/* Layout: one-screen app. Map column (hole illustration, tee at bottom) + narrow numbers column, controls bar, pull-up hole sheet. */
+:root{
+  --bg:#0b1310; --panel:#131f1a; --panel2:#1a2a23; --line:rgba(235,245,238,.10);
+  --fg:#eef3ee; --muted:#93a89b; --amber:#ffcf5c; --user:#4aa8ff; --pin:#ff5a4f;
+  --good:#7fd6a4; --bad:#ff8a73; --ok:#b7c7ff;
+  --font:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+  --peek:62px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);overscroll-behavior:none}
+body{font-size:15px;-webkit-user-select:none;user-select:none;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.screen{position:fixed;inset:0}
+
+/* ---------- start ---------- */
+#start{display:flex;flex-direction:column;justify-content:flex-end;background:radial-gradient(120% 70% at 50% 20%,#2f5a3c 0%,#13261b 55%,#0b1310 100%)}
+#start .bg{position:absolute;inset:0;background-size:cover;background-position:center;transition:background-image .4s}
+#start .bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.15) 0%,rgba(0,0,0,.05) 35%,rgba(5,12,9,.82) 72%,#0b1310 100%)}
+#start .inner{position:relative;padding:0 max(22px,env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(22px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:18px}
+#start .eyebrow{font-size:12px;letter-spacing:.22em;color:#d8e6dc;opacity:.85}
+#start h1{margin:0;font-size:34px;line-height:1.1;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
+#start .sub{color:#c7d6cc;font-size:14px;margin-top:-8px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:9px 14px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);font-size:14px;color:#dfe9e2}
+.chip[aria-pressed="true"]{background:var(--fg);color:#0b1310;border-color:var(--fg);font-weight:700}
+.btn-main{width:100%;padding:18px;border-radius:16px;background:var(--fg);color:#0b1310;font-size:18px;font-weight:800;letter-spacing:-.01em}
+.btn-ghost{width:100%;padding:14px;border-radius:14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);font-weight:600}
+.linkbtn{color:#c7d6cc;font-size:14px;text-decoration:underline;text-underline-offset:3px;padding:6px 0;align-self:center}
+.rowbtns{display:flex;gap:10px}
+
+/* ---------- setup ---------- */
+#setup{background:var(--bg);overflow:auto;padding:calc(18px + env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}
+#setup h2{margin:6px 0 4px;font-size:24px}
+#setup p{margin:0 0 16px;color:var(--muted);font-size:14px;line-height:1.5}
+.clubs{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.club{display:grid;grid-template-columns:minmax(0,1fr) 74px 14px 74px 34px;gap:6px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 6px 6px 12px}
+.club input{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--fg);font:inherit;padding:9px 8px;text-align:center;font-variant-numeric:tabular-nums}
+.club input.name{text-align:left;background:transparent;border-color:transparent;padding-left:0;font-weight:700}
+.club .dash{color:var(--muted);text-align:center}
+.club .del{color:var(--muted);font-size:20px;line-height:1}
+.setup-actions{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+
+/* ---------- play ---------- */
+#play{display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding-top:env(safe-area-inset-top);padding-bottom:calc(var(--peek) + env(safe-area-inset-bottom))}
+.hud{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px max(12px,env(safe-area-inset-right)) 6px max(12px,env(safe-area-inset-left))}
+.hud .hole{display:flex;align-items:baseline;gap:8px;min-width:0}
+.hud .hno{font-size:22px;font-weight:800;letter-spacing:-.02em;white-space:nowrap}
+.hud .hmeta{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badges{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.badge{font-size:12px;padding:5px 8px;border-radius:8px;background:var(--panel);border:1px solid var(--line);white-space:nowrap}
+.badge.gps-good{color:var(--good)} .badge.gps-mid{color:var(--amber)} .badge.gps-bad{color:var(--bad)}
+.badge.est{color:var(--amber);border-color:rgba(255,207,92,.35)}
+.badge.score{font-weight:700}
+
+.field{display:grid;grid-template-columns:minmax(0,1fr) 138px;gap:6px;min-height:0;padding:0 max(8px,env(safe-area-inset-right)) 0 max(6px,env(safe-area-inset-left))}
+#stage{position:relative;min-height:0;min-width:0;touch-action:manipulation;overflow:hidden}
+#stage img,#stage svg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#stage svg{overflow:visible}
+.tipbtn{position:absolute;left:4px;top:4px;z-index:2;font-size:12px;padding:6px 9px;border-radius:9px;background:rgba(11,19,16,.78);border:1px solid var(--line);color:#dfe9e2}
+.offcourse{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:2;font-size:12px;padding:6px 10px;border-radius:9px;background:rgba(11,19,16,.85);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+
+.info{display:flex;flex-direction:column;gap:10px;min-width:0;padding:4px 0 6px;overflow:hidden}
+.dist .lbl{font-size:12px;color:var(--muted)}
+.dist .big{font-size:56px;line-height:.95;font-weight:800;letter-spacing:-.04em}
+.dist .big small{font-size:18px;font-weight:700;letter-spacing:0;margin-left:2px;color:var(--muted)}
+.fb{display:flex;gap:10px;font-size:13px;color:var(--muted);margin-top:4px}
+.fb b{color:var(--fg);font-weight:700}
+.pinseg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
+.pinseg button{padding:7px 0;border-radius:9px;background:var(--panel);border:1px solid var(--line);font-size:12.5px;color:#cfdcd3}
+.pinseg button[aria-pressed="true"]{background:var(--pin);border-color:var(--pin);color:#fff;font-weight:800}
+.club-rec{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px 10px}
+.club-rec .c{font-size:24px;font-weight:800;color:var(--amber);letter-spacing:-.02em}
+.club-rec .r{font-size:12px;color:var(--muted)}
+.plan{font-size:12.5px;line-height:1.55;color:#cfdcd3}
+.plan .step{display:flex;justify-content:space-between;gap:6px}
+.plan .step b{color:var(--amber);font-weight:700}
+.last{font-size:12.5px;color:var(--muted)}
+.last b{color:var(--fg)}
+.gthumb{width:100%;aspect-ratio:1;border-radius:50%;overflow:hidden;border:1px solid var(--line);background:#0e1a14;padding:0;max-width:138px}
+.gthumb img{width:100%;height:100%;object-fit:cover;display:block}
+
+.controls{padding:8px max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left));display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"s shot p" "f f f";gap:8px 10px;align-items:center;border-top:1px solid var(--line);background:var(--bg)}
+.stepper{display:flex;align-items:center;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:3px}
+.stepper button{width:38px;height:44px;border-radius:11px;font-size:22px;color:#cfdcd3}
+.stepper button:active{background:var(--panel2)}
+.stepper .v{min-width:34px;text-align:center;line-height:1.05}
+.stepper .v b{display:block;font-size:22px;font-weight:800}
+.stepper .v span{font-size:11px;color:var(--muted)}
+#stepShot{grid-area:s} #stepPutt{grid-area:p}
+#shotBtn{grid-area:shot;height:58px;border-radius:16px;background:var(--fg);color:#0b1310;font-size:19px;font-weight:800;letter-spacing:-.01em;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+#shotBtn small{font-size:11px;font-weight:600;opacity:.6}
+#shotBtn:active{transform:scale(.98)}
+#shotBtn.wait{opacity:.6}
+.finish{grid-area:f;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr);gap:8px;align-items:center}
+.finish button{height:44px;border-radius:12px;font-weight:800;font-size:16px}
+#holeIn{background:#1f3b2c;color:var(--good);border:1px solid rgba(127,214,164,.35)}
+#okBtn{background:#1f2640;color:var(--ok);border:1px solid rgba(183,199,255,.3)}
+.cur{text-align:right;font-size:13px;color:var(--muted);line-height:1.3}
+.cur b{font-size:17px;color:var(--fg)}
+
+/* ---------- sheet ---------- */
+#sheet{position:fixed;left:0;right:0;bottom:0;height:min(78vh,640px);background:var(--panel);border-top-left-radius:20px;border-top-right-radius:20px;border-top:1px solid var(--line);transform:translateY(calc(100% - var(--peek) - env(safe-area-inset-bottom)));transition:transform .28s cubic-bezier(.2,.8,.2,1);z-index:20;display:flex;flex-direction:column;box-shadow:0 -10px 30px rgba(0,0,0,.35)}
+#sheet.open{transform:translateY(0)}
+#sheet.drag{transition:none}
+.peek{height:var(--peek);flex-shrink:0;padding:8px max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));touch-action:none}
+.handle{width:40px;height:5px;border-radius:3px;background:rgba(255,255,255,.22);margin:0 auto 8px}
+.peekrow{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:#cfdcd3}
+.peekrow b{color:var(--fg)}
+.sheet-body{overflow:auto;padding:4px 0 calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:14px}
+.tabs{display:flex;gap:8px;padding:0 max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))}
+.tabs .chip{background:var(--panel2);border-color:var(--line)}
+.tabs .chip[aria-pressed="true"]{background:var(--fg);color:#0b1310;border-color:var(--fg)}
+.cards{position:relative;display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px max(16px,env(safe-area-inset-right)) 6px max(16px,env(safe-area-inset-left));scrollbar-width:none}
+.cards::-webkit-scrollbar{display:none}
+.card{flex:0 0 104px;scroll-snap-align:start;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:6px;text-align:left;position:relative}
+.card.cur{border-color:var(--fg)}
+.card svg{width:100%;height:118px;display:block;background:#0f1c16;border-radius:10px}
+.card .t{display:flex;justify-content:space-between;align-items:baseline}
+.card .t b{font-size:16px}
+.card .t span{font-size:12px;color:var(--muted)}
+.card .m{font-size:13px;color:#cfdcd3;font-weight:600}
+.card .sc{position:absolute;top:6px;right:6px;font-size:12px;font-weight:800;padding:2px 7px;border-radius:8px;background:var(--panel2)}
+.sec{padding:0 max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))}
+.sec h3{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+.sc-wrap{overflow-x:auto}
+table.sc{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+table.sc th,table.sc td{padding:6px 2px;text-align:center;border-bottom:1px solid var(--line)}
+table.sc th{color:var(--muted);font-weight:600}
+table.sc td.lab{text-align:left;color:var(--muted);padding-left:0}
+.s-m2{color:#8fd0ff;font-weight:800}.s-m1{color:var(--good);font-weight:800}.s-0{color:var(--fg)}.s-p1{color:var(--amber)}.s-p2{color:var(--bad)}
+.setrow{display:flex;flex-wrap:wrap;gap:8px}
+.setrow .chip{background:var(--panel2);border-color:var(--line);font-size:13px}
+.note{font-size:12px;color:var(--muted);line-height:1.5}
+
+/* ---------- overlays ---------- */
+.modal{position:fixed;inset:0;z-index:40;background:rgba(3,8,6,.72);display:flex;align-items:flex-end;justify-content:center;padding:0 max(12px,env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.modal .box{width:100%;max-width:520px;max-height:82vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:18px}
+.modal h4{margin:0 0 6px;font-size:20px}
+.modal p{margin:0 0 10px;line-height:1.55;color:#d6e2da;font-size:14.5px}
+.modal ul{margin:0 0 12px;padding-left:18px;line-height:1.55;color:#d6e2da;font-size:14px}
+.modal .k{font-size:12px;color:var(--muted);margin:10px 0 4px;letter-spacing:.04em}
+.result{text-align:center}
+.result .rname{font-size:40px;font-weight:900;letter-spacing:-.03em;margin:6px 0 2px}
+.result .rsub{color:var(--muted);margin-bottom:16px}
+.toast{position:fixed;left:50%;bottom:calc(150px + var(--peek) + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:50;background:rgba(19,31,26,.96);border:1px solid var(--line);padding:9px 14px;border-radius:12px;font-size:14px;pointer-events:none;transition:opacity .25s;white-space:nowrap}
+.bigslope{width:100%;border-radius:50%;display:block;margin:0 auto 12px;max-width:340px}
+@media (prefers-reduced-motion:reduce){#sheet{transition:none}}
+@media (min-width:640px){.field{grid-template-columns:minmax(0,1fr) 200px}.dist .big{font-size:64px}}
+</style>
+</head>
+<body>
+
+<!-- START -->
+<section id="start" class="screen" hidden>
+  <div class="bg" id="startBg"></div>
+  <div class="inner">
+    <div>
+      <div class="eyebrow">NAMHANGANG S-PARK CC</div>
+      <h1>남한강 에스파크</h1>
+    </div>
+    <div class="sub" id="startSub">출발 코스를 고르고 티업을 누르세요</div>
+    <div class="chips" id="startCourse" role="group" aria-label="출발 코스"></div>
+    <div id="startBtns" class="setup-actions"></div>
+    <button class="linkbtn" id="toSetup">클럽 거리 설정</button>
+  </div>
+</section>
+
+<!-- SETUP -->
+<section id="setup" class="screen" hidden>
+  <h2>내 클럽 거리</h2>
+  <p>클럽별로 평소 보내는 거리(캐리 기준, m)를 적어 주세요. 이 기기에만 저장되고, 남은 거리에 맞는 클럽 추천과 공략 동선 계산에 씁니다.</p>
+  <div class="clubs" id="clubList"></div>
+  <div class="setup-actions">
+    <button class="btn-ghost" id="addClub">+ 클럽 추가</button>
+    <button class="btn-main" id="saveClubs">저장</button>
+  </div>
+</section>
+
+<!-- PLAY -->
+<section id="play" class="screen" hidden>
+  <header class="hud">
+    <div class="hole"><span class="hno" id="hNo">P1</span><span class="hmeta num" id="hMeta"></span></div>
+    <div class="badges"><span class="badge est" id="estBadge" hidden>좌표 추정</span><span class="badge num" id="gpsBadge">GPS …</span><span class="badge score num" id="scoreBadge">E</span></div>
+  </header>
+  <div class="field">
+    <div id="stage">
+      <img id="holeImg" alt="홀 레이아웃">
+      <svg id="ov" xmlns="http://www.w3.org/2000/svg"></svg>
+      <button class="tipbtn" id="tipBtn">공략</button>
+      <div class="offcourse num" id="offMsg" hidden></div>
+    </div>
+    <div class="info">
+      <div class="dist">
+        <div class="lbl" id="distLbl">그린 중앙</div>
+        <div class="big num" id="distBig">—<small>m</small></div>
+        <div class="fb num" id="fb"></div>
+        <div class="pinseg" id="pinSeg" role="group" aria-label="오늘 핀 위치"><button data-m="F">앞핀</button><button data-m="C">중핀</button><button data-m="B">뒷핀</button></div>
+      </div>
+      <div class="club-rec"><div class="c" id="clubRec">—</div><div class="r num" id="clubRange"></div></div>
+      <div class="plan num" id="plan"></div>
+      <div class="last num" id="lastShot"></div>
+      <button class="gthumb" id="gthumb" hidden aria-label="그린 경사 크게 보기"><img id="gthumbImg" alt="그린 경사"></button>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="stepper" id="stepShot"><button data-d="-1" aria-label="샷 빼기">−</button><div class="v"><b class="num" id="shotN">0</b><span>샷</span></div><button data-d="1" aria-label="샷 더하기">+</button></div>
+    <button id="shotBtn">샷 기록<small>현재 위치 저장</small></button>
+    <div class="stepper" id="stepPutt"><button data-d="-1" aria-label="퍼트 빼기">−</button><div class="v"><b class="num" id="puttN">0</b><span>퍼트</span></div><button data-d="1" aria-label="퍼트 더하기">+</button></div>
+    <div class="finish">
+      <button id="holeIn">홀인</button>
+      <button id="okBtn">OK</button>
+      <div class="cur num" id="curStroke"></div>
+    </div>
+  </div>
+</section>
+
+<!-- SHEET -->
+<div id="sheet" hidden>
+  <div class="peek" id="peek">
+    <div class="handle"></div>
+    <div class="peekrow num"><span id="peekL"></span><span id="peekR"></span></div>
+  </div>
+  <div class="sheet-body">
+    <div class="tabs" id="tabs"></div>
+    <div class="cards" id="cards"></div>
+    <div class="sec">
+      <h3>스코어카드</h3>
+      <div class="sc-wrap" id="scorecard"></div>
+    </div>
+    <div class="sec">
+      <h3>설정</h3>
+      <div class="setrow">
+        <button class="chip" id="setClubs">클럽 거리</button>
+        <button class="chip" id="setTee">거리 표기: 화이트</button>
+        <button class="chip" id="setWake" aria-pressed="false">화면 켜짐 유지</button>
+        <button class="chip" id="setHome">처음 화면</button>
+      </div>
+    </div>
+    <div class="sec note" id="sheetNote"></div>
+  </div>
+</div>
+
+<div class="modal" id="modal" hidden><div class="box" id="modalBox"></div></div>
+<div class="toast" id="toast" style="opacity:0"></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
